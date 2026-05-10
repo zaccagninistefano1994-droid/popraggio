@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PopRaggio — Popolazione per raggio · Lazio ISTAT 2021</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f4f4f0;
+  --surface: #ffffff;
+  --card: #f8f8f5;
+  --border: #ddddd5;
+  --accent: #2a7a2a;
+  --accent-light: #e8f5e8;
+  --blue: #1a6fa0;
+  --blue-light: #e3f2fd;
+  --text: #1a1a14;
+  --muted: #7a7a6e;
+  --r: 7px;
+}
+body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 1000; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.logo { font-family: 'Fraunces', serif; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: baseline; gap: 8px; }
+.logo-accent { color: var(--accent); }
+.logo-sub { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; font-family: 'DM Mono', monospace; font-weight: 400; }
+.header-hint { font-size: 0.65rem; color: var(--muted); }
+.main { display: flex; flex: 1; overflow: hidden; }
+#map { flex: 1; cursor: crosshair !important; }
+.leaflet-control-zoom a { background: white !important; color: var(--text) !important; border-color: var(--border) !important; }
+.leaflet-control-zoom a:hover { background: var(--card) !important; color: var(--accent) !important; }
+.panel { width: 300px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; padding: 16px; gap: 16px; box-shadow: -2px 0 8px rgba(0,0,0,0.04); }
+.section-label { font-size: 0.58rem; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+
+/* Search */
+.search-wrap { position: relative; }
+.search-input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 12px 9px 34px; font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--text); outline: none; transition: border-color 0.15s; }
+.search-input:focus { border-color: var(--blue); background: white; }
+.search-input::placeholder { color: var(--muted); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
+.search-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1px solid var(--border); border-radius: var(--r); box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 2000; max-height: 200px; overflow-y: auto; }
+.search-result-item { padding: 8px 12px; font-size: 0.68rem; cursor: pointer; border-bottom: 1px solid var(--border); line-height: 1.4; transition: background 0.1s; }
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover { background: var(--blue-light); color: var(--blue); }
+.search-loading { padding: 10px 12px; font-size: 0.68rem; color: var(--muted); }
+
+/* Radius */
+.radius-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.r-btn { background: var(--card); border: 1px solid var(--border); color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.68rem; padding: 9px 4px; cursor: pointer; border-radius: var(--r); transition: all 0.12s; text-align: center; }
+.r-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+.r-btn.active { background: var(--blue); color: white; border-color: var(--blue); font-weight: 500; }
+.slider-row { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--muted); margin-bottom: 6px; }
+.slider-row .sv { color: var(--blue); font-size: 0.72rem; font-weight: 500; }
+input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: var(--border); border-radius: 2px; outline: none; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--blue); cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px var(--blue); }
+
+/* Coord */
+.coord-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; font-size: 0.63rem; color: var(--muted); line-height: 1.8; }
+.coord-val { color: var(--text); font-weight: 500; }
+.coord-hint { font-size: 0.6rem; color: var(--muted); font-style: italic; }
+.coord-addr { font-size: 0.6rem; color: var(--muted); margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+
+/* Result */
+.result-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; animation: fadeUp 0.25s ease; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.result-pop { font-family: 'Fraunces', serif; font-size: 2.6rem; font-weight: 700; color: var(--accent); line-height: 1; margin: 4px 0; }
+.result-label { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.result-meta { font-size: 0.65rem; color: var(--muted); margin-top: 6px; }
+.result-meta span { color: var(--text); font-weight: 500; }
+.result-breakdown { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.breakdown-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.65rem; padding: 6px 10px; background: white; border-radius: 4px; border: 1px solid var(--border); border-left: 3px solid var(--accent); }
+.breakdown-row .bval { color: var(--accent); font-size: 0.78rem; font-weight: 500; }
+.breakdown-row .bname { color: var(--muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loading { display: flex; align-items: center; gap: 8px; font-size: 0.68rem; color: var(--muted); padding: 8px 0; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { font-size: 0.7rem; color: var(--muted); text-align: center; padding: 20px 10px; line-height: 1.7; }
+.divider { height: 1px; background: var(--border); margin: 0 -16px; }
+.source-badge { font-size: 0.58rem; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 3px 8px; display: inline-block; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Pop<span class="logo-accent">Raggio</span><span class="logo-sub">Lazio · ISTAT 2021</span></div>
+  <div class="header-hint">Cerca un indirizzo o clicca sulla mappa</div>
+</header>
+<div class="main">
+  <div id="map"></div>
+  <div class="panel">
+    <div>
+      <div class="section-label">Cerca indirizzo</div>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="search-input" class="search-input" placeholder="es. Via Nazionale, Roma...">
+        <div class="search-results" id="search-results" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div>
+      <div class="section-label">Raggio di analisi</div>
+      <div class="radius-grid">
+        <button class="r-btn" data-km="0.5">500m</button>
+        <button class="r-btn active" data-km="1">1 km</button>
+        <button class="r-btn" data-km="2">2 km</button>
+        <button class="r-btn" data-km="3">3 km</button>
+        <button class="r-btn" data-km="4">4 km</button>
+        <button class="r-btn" data-km="5">5 km</button>
+        <button class="r-btn" data-km="custom" id="custom-btn">—</button>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="slider-row"><span>Personalizzato</span><span class="sv" id="slider-val">1.0 km</span></div>
+        <input type="range" id="radius-slider" min="0.1" max="5" step="0.1" value="1">
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div>
+      <div class="section-label">Punto selezionato</div>
+      <div class="coord-box" id="coord-box"><div class="coord-hint">↖ Cerca un indirizzo o clicca sulla mappa</div></div>
+    </div>
+    <div class="divider"></div>
+    <div>
+      <div class="section-label">Popolazione nel raggio</div>
+      <div id="result-area"><div class="empty">Seleziona un punto sulla mappa per calcolare la popolazione residente.</div></div>
+    </div>
+  </div>
+</div>
+<script>
+const BASE_URL = 'https://zaccagninistefano1994-droid.github.io/popraggio/';
+let index = null, selectedPoint = null, currentRadius = 1;
+let circleLayer = null, markerLayer = null, searchTimeout = null;
+
+const map = L.map('map', { center: [41.9, 12.5], zoom: 9 });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+async function loadIndex() {
+  try { const r = await fetch(BASE_URL + 'index.json'); index = await r.json(); }
+  catch(e) { console.error('Errore index:', e); }
+}
+loadIndex();
+
+// Geocoding
+async function searchAddress(query) {
+  const resultsDiv = document.getElementById('search-results');
+  resultsDiv.style.display = 'block';
+  resultsDiv.innerHTML = '<div class="search-loading">Ricerca in corso...</div>';
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Lazio, Italia')}&format=json&limit=5`;
+    const resp = await fetch(url, { headers: { 'Accept-Language': 'it' } });
+    const results = await resp.json();
+    if (!results.length) { resultsDiv.innerHTML = '<div class="search-loading">Nessun risultato</div>'; return; }
+    resultsDiv.innerHTML = results.map(r => `<div class="search-result-item" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${r.display_name}">${r.display_name}</div>`).join('');
+    resultsDiv.querySelectorAll('.search-result-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const lat = parseFloat(item.dataset.lat), lng = parseFloat(item.dataset.lng);
+        resultsDiv.style.display = 'none';
+        document.getElementById('search-input').value = item.dataset.name.split(',')[0];
+        selectPoint(lat, lng, item.dataset.name.split(',').slice(0,2).join(',').trim());
+        map.setView([lat, lng], 14);
+      });
+    });
+  } catch(e) { resultsDiv.innerHTML = '<div class="search-loading">Errore nella ricerca</div>'; }
+}
+
+document.getElementById('search-input').addEventListener('input', function() {
+  clearTimeout(searchTimeout);
+  const q = this.value.trim();
+  if (q.length < 3) { document.getElementById('search-results').style.display = 'none'; return; }
+  searchTimeout = setTimeout(() => searchAddress(q), 400);
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) document.getElementById('search-results').style.display = 'none'; });
+
+// Geometria
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+function kmToLat(km) { return km / 111.0; }
+function kmToLng(km, lat) { return km / (111.0 * Math.cos(lat * Math.PI / 180)); }
+function ptInCircle(px, py, cx, cy, r) { return haversine(cy, cx, py, px) <= r; }
+
+function segCircleIntersects(ax, ay, bx, by, cx, cy, rKm) {
+  const mLat = (ay+by)/2;
+  const sX = 111.0*Math.cos(mLat*Math.PI/180), sY = 111.0;
+  const ax2=(ax-cx)*sX, ay2=(ay-cy)*sY, bx2=(bx-cx)*sX, by2=(by-cy)*sY;
+  const dx=bx2-ax2, dy=by2-ay2, fx=ax2, fy=ay2;
+  const a=dx*dx+dy*dy, b=2*(fx*dx+fy*dy), c=fx*fx+fy*fy-rKm*rKm;
+  const disc = b*b-4*a*c;
+  if (disc < 0) return false;
+  const sq = Math.sqrt(disc);
+  const t1=(-b-sq)/(2*a), t2=(-b+sq)/(2*a);
+  return (t1>=0&&t1<=1)||(t2>=0&&t2<=1);
+}
+
+function pointInPoly(px, py, ring) {
+  let inside = false;
+  for (let i=0, j=ring.length-1; i<ring.length; j=i++) {
+    const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+    if (((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+
+function computeRatio(ring, cx, cy, rKm) {
+  if (ring.length < 3) return 0;
+  const allIn = ring.every(p => ptInCircle(p[0],p[1],cx,cy,rKm));
+  if (allIn) return 1.0;
+  const anyIn = ring.some(p => ptInCircle(p[0],p[1],cx,cy,rKm));
+  let anyX = false;
+  for (let i=0; i<ring.length-1; i++) {
+    if (segCircleIntersects(ring[i][0],ring[i][1],ring[i+1][0],ring[i+1][1],cx,cy,rKm)) { anyX=true; break; }
+  }
+  if (!anyIn && !anyX) return pointInPoly(cx,cy,ring) ? 1.0 : 0.0;
+  // Monte Carlo
+  const xs=ring.map(p=>p[0]), ys=ring.map(p=>p[1]);
+  const dLat=kmToLat(rKm), dLng=kmToLng(rKm,cy);
+  const minX=Math.max(Math.min(...xs),cx-dLng), maxX=Math.min(Math.max(...xs),cx+dLng);
+  const minY=Math.max(Math.min(...ys),cy-dLat), maxY=Math.min(Math.max(...ys),cy+dLat);
+  if (minX>=maxX||minY>=maxY) return 0;
+  const N=300; let inside=0;
+  for (let i=0; i<N; i++) {
+    const px=minX+Math.random()*(maxX-minX), py=minY+Math.random()*(maxY-minY);
+    if (pointInPoly(px,py,ring) && ptInCircle(px,py,cx,cy,rKm)) inside++;
+  }
+  return inside/N;
+}
+
+function circleBbox(lat, lng, r) {
+  const dLat=kmToLat(r), dLng=kmToLng(r,lat);
+  return [lng-dLng, lat-dLat, lng+dLng, lat+dLat];
+}
+function bboxOverlap(a,b) { return a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1]; }
+
+async function calcola(lat, lng, rKm) {
+  if (!index) { showError('Indice non ancora caricato, riprova tra qualche secondo.'); return; }
+  showLoading();
+  if (circleLayer) { map.removeLayer(circleLayer); circleLayer=null; }
+  const bb = circleBbox(lat, lng, rKm);
+  const comuni = Object.entries(index).filter(([,d]) => bboxOverlap(bb, d.bbox));
+  if (!comuni.length) { showError('Nessun comune del Lazio nel raggio selezionato.'); return; }
+  circleLayer = L.circle([lat,lng], { radius:rKm*1000, color:'#1a6fa0', weight:2, fillColor:'#1a6fa0', fillOpacity:0.08, dashArray:'6 4' }).addTo(map);
+  let totalPop=0, results=[];
+  for (const [code, data] of comuni) {
+    try {
+      let pop=0;
+      if (data.t==='centroid') {
+        const r = await fetch(`${BASE_URL}${code}.json`);
+        const entries = await r.json();
+        for (const [elng,elat,epop] of entries) if (ptInCircle(elng,elat,lng,lat,rKm)) pop+=epop;
+      } else {
+        const r = await fetch(`${BASE_URL}${code}.geojson`);
+        const fc = await r.json();
+        for (const ft of fc.features) {
+          const p=ft.properties.p; if(!p) continue;
+          const rings = ft.geometry.type==='Polygon' ? [ft.geometry.coordinates[0]] : ft.geometry.coordinates.map(p=>p[0]);
+          for (const ring of rings) { const ratio=computeRatio(ring,lng,lat,rKm); if(ratio>0) pop+=Math.round(p*ratio); }
+        }
+      }
+      if (pop>0) { results.push({name:data.name,pop,code}); totalPop+=pop; }
+    } catch(e) { console.warn(`Errore ${code}:`,e); }
+  }
+  results.sort((a,b)=>b.pop-a.pop);
+  showResult(totalPop, rKm, results);
+}
+
+function showLoading() { document.getElementById('result-area').innerHTML='<div class="loading"><div class="spinner"></div><span>Calcolo in corso...</span></div>'; }
+function showError(msg) { document.getElementById('result-area').innerHTML=`<div class="empty">${msg}</div>`; }
+function fmt(n) { return n.toLocaleString('it-IT'); }
+
+function showResult(totalPop, rKm, comuni) {
+  const top=comuni.slice(0,6), altri=comuni.slice(6);
+  const altriPop=altri.reduce((s,c)=>s+c.pop,0);
+  const rows=top.map(c=>`<div class="breakdown-row"><span class="bname">${c.name}</span><span class="bval">${fmt(c.pop)}</span></div>`).join('');
+  const altriRow=altri.length?`<div class="breakdown-row"><span class="bname">Altri ${altri.length} comuni</span><span class="bval">${fmt(altriPop)}</span></div>`:'';
+  document.getElementById('result-area').innerHTML=`
+    <div class="result-box">
+      <div class="result-label">Popolazione stimata</div>
+      <div class="result-pop">${fmt(totalPop)}</div>
+      <div class="result-meta">entro <span>${rKm} km</span> · <span>${comuni.length}</span> comuni coinvolti</div>
+      <div class="result-breakdown">${rows}${altriRow}</div>
+      <span class="source-badge">ISTAT Censimento 2021</span>
+    </div>`;
+}
+
+function updateCoordBox(lat, lng, label) {
+  document.getElementById('coord-box').innerHTML=`<div>Lat <span class="coord-val">${lat.toFixed(5)}</span></div><div>Lng <span class="coord-val">${lng.toFixed(5)}</span></div>${label?`<div class="coord-addr">${label}</div>`:''}`;
+}
+
+function selectPoint(lat, lng, label) {
+  selectedPoint={lat,lng};
+  if (markerLayer) map.removeLayer(markerLayer);
+  markerLayer=L.circleMarker([lat,lng],{radius:7,color:'#2a7a2a',weight:2,fillColor:'#2a7a2a',fillOpacity:0.9}).addTo(map);
+  updateCoordBox(lat,lng,label);
+  calcola(lat,lng,currentRadius);
+}
+
+map.on('click', e => selectPoint(e.latlng.lat, e.latlng.lng, null));
+
+document.querySelectorAll('.r-btn[data-km]').forEach(btn => {
+  if (btn.dataset.km==='custom') return;
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.r-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    currentRadius=parseFloat(this.dataset.km);
+    document.getElementById('radius-slider').value=currentRadius;
+    document.getElementById('slider-val').textContent=currentRadius.toFixed(1)+' km';
+    if (selectedPoint) calcola(selectedPoint.lat,selectedPoint.lng,currentRadius);
+  });
+});
+
+document.getElementById('radius-slider').addEventListener('input', function() {
+  currentRadius=parseFloat(this.value);
+  document.getElementById('slider-val').textContent=currentRadius.toFixed(1)+' km';
+  document.querySelectorAll('.r-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('custom-btn').classList.add('active');
+  document.getElementById('custom-btn').textContent=currentRadius.toFixed(1);
+  if (selectedPoint) calcola(selectedPoint.lat,selectedPoint.lng,currentRadius);
+});
+</script>
+</body>
+</html>
